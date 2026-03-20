@@ -281,7 +281,7 @@ with st.sidebar:
     api_token = st.text_input(
         "Access Token",
         type="password",
-        placeholder="YOUR_ACCESS_TOKEN",
+        placeholder=st.secrets["INDSTOCKS_TOKEN"]
         help="Your INDstocks API bearer token",
     )
 
