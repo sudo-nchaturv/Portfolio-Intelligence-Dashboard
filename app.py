@@ -205,12 +205,98 @@ def fetch_holdings(token: str) -> Optional[pd.DataFrame]:
         r = requests.get(f"{BASE_URL}/portfolio/holdings",
                          headers=api_headers(token), timeout=15)
         r.raise_for_status()
-        data = r.json().get("data", [])
+        payload = r.json()
+        data = payload.get("data", [])
         if not data:
+            st.error("Holdings API returned empty data. Check your token.")
+            with st.expander("Raw API response (debug)"):
+                st.json(payload)
             return None
+
         df = pd.DataFrame(data)
-        df["weight_pct"] = (df["market_value"] / df["market_value"].sum() * 100).round(2)
+
+        # ── Normalise field names ─────────────────────────────────────────
+        # The live API may return camelCase or alternate snake_case variants.
+        # Map everything to the names the rest of the app expects.
+        rename_map = {
+            "marketValue":      "market_value",
+            "market_val":       "market_value",
+            "mkt_value":        "market_value",
+            "currentValue":     "market_value",
+            "current_value":    "market_value",
+            "averagePrice":     "average_price",
+            "avg_price":        "average_price",
+            "buyPrice":         "average_price",
+            "buy_price":        "average_price",
+            "lastTradedPrice":  "last_traded_price",
+            "ltp":              "last_traded_price",
+            "lastPrice":        "last_traded_price",
+            "last_price":       "last_traded_price",
+            "pnlAbsolute":      "pnl_absolute",
+            "pnl_abs":          "pnl_absolute",
+            "unrealisedPnl":    "pnl_absolute",
+            "unrealized_pnl":   "pnl_absolute",
+            "pnlPercent":       "pnl_percent",
+            "pnl_pct":          "pnl_percent",
+            "pnlPercentage":    "pnl_percent",
+            "tradingSymbol":    "trading_symbol",
+            "symbol":           "trading_symbol",
+            "scripName":        "trading_symbol",
+            "securityId":       "security_id",
+            "scripCode":        "security_id",
+            "scrip_code":       "security_id",
+            "exchangeSegment":  "exchange_segment",
+        }
+        df = df.rename(columns={k: v for k, v in rename_map.items() if k in df.columns})
+
+        # ── Derive missing columns if possible ────────────────────────────
+        if "market_value" not in df.columns:
+            if "quantity" in df.columns and "last_traded_price" in df.columns:
+                df["market_value"] = df["quantity"] * df["last_traded_price"]
+            else:
+                st.error("Could not find or derive `market_value`.")
+                with st.expander("Raw API response (debug) — check actual field names"):
+                    st.write("**Columns returned:**", df.columns.tolist())
+                    st.dataframe(df.head(3))
+                return None
+
+        if "pnl_absolute" not in df.columns:
+            if "quantity" in df.columns and "average_price" in df.columns and "last_traded_price" in df.columns:
+                df["pnl_absolute"] = (df["last_traded_price"] - df["average_price"]) * df["quantity"]
+            else:
+                df["pnl_absolute"] = 0.0
+
+        if "pnl_percent" not in df.columns:
+            if "average_price" in df.columns and "last_traded_price" in df.columns:
+                df["pnl_percent"] = (
+                    (df["last_traded_price"] - df["average_price"])
+                    / df["average_price"] * 100
+                ).replace([float("inf"), float("-inf")], 0).fillna(0)
+            else:
+                df["pnl_percent"] = 0.0
+
+        if "trading_symbol" not in df.columns:
+            candidates = [c for c in df.columns if "symbol" in c.lower() or "name" in c.lower()]
+            df["trading_symbol"] = df[candidates[0]] if candidates else df.index.astype(str)
+
+        if "security_id" not in df.columns:
+            df["security_id"] = df.index.astype(str)
+
+        if "last_traded_price" not in df.columns:
+            df["last_traded_price"] = df.get("average_price", 0)
+
+        if "average_price" not in df.columns:
+            df["average_price"] = 0.0
+
+        if "quantity" not in df.columns:
+            df["quantity"] = 0
+
+        # ── Portfolio weight ──────────────────────────────────────────────
+        total = df["market_value"].sum()
+        df["weight_pct"] = (df["market_value"] / total * 100).round(2) if total else 0.0
+
         return df
+
     except Exception as e:
         st.error(f"Holdings API error: {e}")
         return None
