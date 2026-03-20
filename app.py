@@ -21,7 +21,6 @@ from risk import (
     compute_rsi,
     compute_sma,
     compute_momentum,
-    compute_beta,
 )
 from alerts import send_telegram_alert, build_alert_message, check_alert_conditions
 
