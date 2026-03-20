@@ -278,16 +278,23 @@ with st.sidebar:
     """, unsafe_allow_html=True)
 
     st.markdown('<div class="section-header">API CONFIG</div>', unsafe_allow_html=True)
+    _default_token      = st.secrets.get("INDSTOCKS_TOKEN",  "")
+    _default_tele_token = st.secrets.get("TELEGRAM_TOKEN",   "")
+    _default_tele_chat  = st.secrets.get("TELEGRAM_CHAT_ID", "")
+
     api_token = st.text_input(
         "Access Token",
+        value=_default_token,
         type="password",
-        placeholder=st.secrets["INDSTOCKS_TOKEN"]
+        placeholder="YOUR_ACCESS_TOKEN",
         help="Your INDstocks API bearer token",
     )
 
     st.markdown('<div class="section-header">TELEGRAM ALERTS</div>', unsafe_allow_html=True)
-    tele_token  = st.text_input("Bot Token",  type="password", placeholder="123456:ABC…")
-    tele_chatid = st.text_input("Chat ID",    placeholder="-100XXXXXXXXXX")
+    tele_token  = st.text_input("Bot Token",  value=_default_tele_token,
+                                type="password", placeholder="123456:ABC…")
+    tele_chatid = st.text_input("Chat ID",    value=_default_tele_chat,
+                                placeholder="-100XXXXXXXXXX")
     tele_enabled = st.toggle("Enable alerts", value=False)
 
     st.markdown('<div class="section-header">THRESHOLDS</div>', unsafe_allow_html=True)
