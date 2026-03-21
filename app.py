@@ -380,14 +380,21 @@ def fetch_ohlcv(scrip_code: str, token: str, days_back: int = 365) -> Optional[p
                     "end_time":   end_ms},
             timeout=20,
         )
+        with open("debug_ohlcv.txt", "a") as f:
+            f.write(f"\\nDEBUG {scrip_code} ({start_ms} to {end_ms}): Status {r.status_code}\\n")
+            f.write(r.text[:200] + "\\n")
         r.raise_for_status()
         candles = r.json().get("data", {}).get("candles", [])
+        with open("debug_ohlcv.txt", "a") as f:
+            f.write(f"DEBUG {scrip_code} candles count: {len(candles)}\\n")
         if not candles:
             return None
         df = pd.DataFrame(candles, columns=["ts","open","high","low","close","volume"])
         df["ts"] = pd.to_datetime(df["ts"], unit="ms", utc=True).dt.tz_localize(None)
         return df.set_index("ts").sort_index()
     except Exception as e:
+        with open("debug_ohlcv.txt", "a") as f:
+            f.write(f"DEBUG {scrip_code} EXCEPT: {e}\\n")
         # Avoid spamming the UI with warnings for every single stock if it fails
         # Instead, just return None.
         return None
