@@ -218,20 +218,45 @@ def fetch_holdings(token: str) -> Optional[pd.DataFrame]:
         # ── Normalise field names ─────────────────────────────────────────
         # The live API may return camelCase or alternate snake_case variants.
         # Map everything to the names the rest of the app expects.
+<<<<<<< HEAD
         rename_map = {
+=======
+        # INDmoney / INDstocks holdings fields observed:
+        #   total_qty, average_price, used_qty, isin, security_id,
+        #   trading_symbol, t1_avg_price, t1_qty, dp_qty, dp_avg_price
+        rename_map = {
+            # quantity
+            "total_qty":        "quantity",
+            "totalQty":         "quantity",
+            "qty":              "quantity",
+            "Qty":              "quantity",
+            # market value
+>>>>>>> 8dfc57d (Updated from AG)
             "marketValue":      "market_value",
             "market_val":       "market_value",
             "mkt_value":        "market_value",
             "currentValue":     "market_value",
             "current_value":    "market_value",
+<<<<<<< HEAD
+=======
+            # average / buy price
+>>>>>>> 8dfc57d (Updated from AG)
             "averagePrice":     "average_price",
             "avg_price":        "average_price",
             "buyPrice":         "average_price",
             "buy_price":        "average_price",
+<<<<<<< HEAD
+=======
+            # last traded price
+>>>>>>> 8dfc57d (Updated from AG)
             "lastTradedPrice":  "last_traded_price",
             "ltp":              "last_traded_price",
             "lastPrice":        "last_traded_price",
             "last_price":       "last_traded_price",
+<<<<<<< HEAD
+=======
+            # pnl
+>>>>>>> 8dfc57d (Updated from AG)
             "pnlAbsolute":      "pnl_absolute",
             "pnl_abs":          "pnl_absolute",
             "unrealisedPnl":    "pnl_absolute",
@@ -239,6 +264,10 @@ def fetch_holdings(token: str) -> Optional[pd.DataFrame]:
             "pnlPercent":       "pnl_percent",
             "pnl_pct":          "pnl_percent",
             "pnlPercentage":    "pnl_percent",
+<<<<<<< HEAD
+=======
+            # symbol / id
+>>>>>>> 8dfc57d (Updated from AG)
             "tradingSymbol":    "trading_symbol",
             "symbol":           "trading_symbol",
             "scripName":        "trading_symbol",
@@ -250,9 +279,54 @@ def fetch_holdings(token: str) -> Optional[pd.DataFrame]:
         df = df.rename(columns={k: v for k, v in rename_map.items() if k in df.columns})
 
         # ── Derive missing columns if possible ────────────────────────────
+<<<<<<< HEAD
         if "market_value" not in df.columns:
             if "quantity" in df.columns and "last_traded_price" in df.columns:
                 df["market_value"] = df["quantity"] * df["last_traded_price"]
+=======
+        # Ensure quantity exists first (needed for market_value derivation)
+        if "quantity" not in df.columns:
+            # Try to reconstruct from dp + t1 quantities
+            if "dp_qty" in df.columns and "t1_qty" in df.columns:
+                df["quantity"] = pd.to_numeric(df["dp_qty"], errors="coerce").fillna(0) \
+                               + pd.to_numeric(df["t1_qty"], errors="coerce").fillna(0)
+            else:
+                df["quantity"] = 0
+
+        df["quantity"] = pd.to_numeric(df["quantity"], errors="coerce").fillna(0)
+
+        if "average_price" not in df.columns:
+            df["average_price"] = 0.0
+        df["average_price"] = pd.to_numeric(df["average_price"], errors="coerce").fillna(0)
+
+        if "market_value" not in df.columns:
+            if "last_traded_price" in df.columns:
+                # Prefer LTP * qty
+                df["market_value"] = pd.to_numeric(df["last_traded_price"], errors="coerce").fillna(0) \
+                                     * df["quantity"]
+            elif "dp_qty" in df.columns and "dp_avg_price" in df.columns \
+                    and "t1_qty" in df.columns and "t1_avg_price" in df.columns:
+                # Use cost-basis breakdown: DP holdings + T1 holdings
+                dp_val = pd.to_numeric(df["dp_qty"], errors="coerce").fillna(0) \
+                       * pd.to_numeric(df["dp_avg_price"], errors="coerce").fillna(0)
+                t1_val = pd.to_numeric(df["t1_qty"], errors="coerce").fillna(0) \
+                       * pd.to_numeric(df["t1_avg_price"], errors="coerce").fillna(0)
+                df["market_value"] = dp_val + t1_val
+                st.warning(
+                    "⚠ LTP not available from API — market value estimated from cost basis "
+                    "(dp_qty × dp_avg_price + t1_qty × t1_avg_price). "
+                    "P&L figures will show ₹0 until live prices are available.",
+                    icon="ℹ️",
+                )
+            elif "quantity" in df.columns and "average_price" in df.columns:
+                # Last resort: qty × avg cost
+                df["market_value"] = df["quantity"] * df["average_price"]
+                st.warning(
+                    "⚠ LTP not available — market value estimated from qty × avg price (cost basis). "
+                    "P&L will show ₹0.",
+                    icon="ℹ️",
+                )
+>>>>>>> 8dfc57d (Updated from AG)
             else:
                 st.error("Could not find or derive `market_value`.")
                 with st.expander("Raw API response (debug) — check actual field names"):
@@ -260,13 +334,27 @@ def fetch_holdings(token: str) -> Optional[pd.DataFrame]:
                     st.dataframe(df.head(3))
                 return None
 
+<<<<<<< HEAD
         if "pnl_absolute" not in df.columns:
             if "quantity" in df.columns and "average_price" in df.columns and "last_traded_price" in df.columns:
+=======
+        df["market_value"] = pd.to_numeric(df["market_value"], errors="coerce").fillna(0)
+
+        if "last_traded_price" not in df.columns:
+            # Use average_price as a stand-in so downstream code doesn't break
+            df["last_traded_price"] = df["average_price"]
+
+        df["last_traded_price"] = pd.to_numeric(df["last_traded_price"], errors="coerce").fillna(0)
+
+        if "pnl_absolute" not in df.columns:
+            if df["last_traded_price"].ne(df["average_price"]).any():
+>>>>>>> 8dfc57d (Updated from AG)
                 df["pnl_absolute"] = (df["last_traded_price"] - df["average_price"]) * df["quantity"]
             else:
                 df["pnl_absolute"] = 0.0
 
         if "pnl_percent" not in df.columns:
+<<<<<<< HEAD
             if "average_price" in df.columns and "last_traded_price" in df.columns:
                 df["pnl_percent"] = (
                     (df["last_traded_price"] - df["average_price"])
@@ -274,6 +362,17 @@ def fetch_holdings(token: str) -> Optional[pd.DataFrame]:
                 ).replace([float("inf"), float("-inf")], 0).fillna(0)
             else:
                 df["pnl_percent"] = 0.0
+=======
+            mask = df["average_price"] != 0
+            df["pnl_percent"] = 0.0
+            df.loc[mask, "pnl_percent"] = (
+                (df.loc[mask, "last_traded_price"] - df.loc[mask, "average_price"])
+                / df.loc[mask, "average_price"] * 100
+            )
+            df["pnl_percent"] = df["pnl_percent"].replace(
+                [float("inf"), float("-inf")], 0
+            ).fillna(0)
+>>>>>>> 8dfc57d (Updated from AG)
 
         if "trading_symbol" not in df.columns:
             candidates = [c for c in df.columns if "symbol" in c.lower() or "name" in c.lower()]
@@ -282,6 +381,7 @@ def fetch_holdings(token: str) -> Optional[pd.DataFrame]:
         if "security_id" not in df.columns:
             df["security_id"] = df.index.astype(str)
 
+<<<<<<< HEAD
         if "last_traded_price" not in df.columns:
             df["last_traded_price"] = df.get("average_price", 0)
 
@@ -291,6 +391,8 @@ def fetch_holdings(token: str) -> Optional[pd.DataFrame]:
         if "quantity" not in df.columns:
             df["quantity"] = 0
 
+=======
+>>>>>>> 8dfc57d (Updated from AG)
         # ── Portfolio weight ──────────────────────────────────────────────
         total = df["market_value"].sum()
         df["weight_pct"] = (df["market_value"] / total * 100).round(2) if total else 0.0
