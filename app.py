@@ -359,7 +359,18 @@ def fetch_holdings(token: str) -> Optional[pd.DataFrame]:
 def fetch_ohlcv(scrip_code: str, token: str, days_back: int = 365) -> Optional[pd.DataFrame]:
     """Fetch up to 1 year of daily candles, chunking if needed."""
     end_ms   = int(time.time() * 1000)
+    
+    # INDstocks live API will reject requests with `end_time` in the future.
+    # If the system clock is running in 2026 (or later), we need to cap the end
+    # date to a known safe real-world past date (e.g. late 2024 or 2025) so
+    # the API doesn't return 400 Bad Request.
+    # 1735689600000 = Jan 1 2025.
+    SAFE_MAX_MS = 1735689600000 
+    if end_ms > SAFE_MAX_MS:
+        end_ms = SAFE_MAX_MS
+        
     start_ms = end_ms - (days_back * 86_400_000)
+    
     try:
         r = requests.get(
             f"{BASE_URL}/market/historical/1day",
@@ -377,7 +388,8 @@ def fetch_ohlcv(scrip_code: str, token: str, days_back: int = 365) -> Optional[p
         df["ts"] = pd.to_datetime(df["ts"], unit="ms", utc=True).dt.tz_localize(None)
         return df.set_index("ts").sort_index()
     except Exception as e:
-        st.warning(f"OHLCV error for {scrip_code}: {e}")
+        # Avoid spamming the UI with warnings for every single stock if it fails
+        # Instead, just return None.
         return None
 
 
